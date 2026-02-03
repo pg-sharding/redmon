@@ -53,29 +53,6 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(stderr, "")
         self.assertEqual(code, 0)
 
-    @patch("subprocess.run")
-    def test_execute_command_prod(self, mock_run):
-        """Test command execution in production mode."""
-        mock_result = Mock()
-        mock_result.stdout = "test output"
-        mock_result.stderr = ""
-        mock_result.returncode = 0
-        mock_run.return_value = mock_result
-
-        monitor = SPQRMonitor(
-            db_host="localhost",
-            db_port=6432,
-            db_name="spqr-console",
-            db_user="spqr-console",
-            dry_run=False,
-            logger=self.logger,
-        )
-
-        stdout, stderr, code = monitor._execute_command("echo test")
-        self.assertEqual(stdout, "test output")
-        self.assertEqual(stderr, "")
-        self.assertEqual(code, 0)
-
     def test_parse_task_groups_success(self):
         """Test parsing task groups from psql output."""
         psql_output = """                             task_group_id             | destination_shard_id |                source_key_range_id                 |       destination_key_range_id       |             move_task_id             |  state  |                                             error
@@ -85,7 +62,7 @@ class TestSPQRMonitor(unittest.TestCase):
  5f6d8069-3794-4442-8750-fa0cdfe3b721 | shard-001            | ds_user_id_kr_0584766d_9c2c_438a_8c0c_28678d8954af | b4674c92-1a01-4a8e-8764-b4961a98e352 | 00cf8b2d-6b57-48cd-81b8-76cbc798ad90 | RUNNING |"""
 
         with patch.object(
-            self.monitor, "_execute_command", return_value=(psql_output, "", 0)
+            self.monitor, "execute_show", return_value=(psql_output, "", 0)
         ):
             task_groups = self.monitor.get_task_groups()
 
@@ -100,7 +77,7 @@ class TestSPQRMonitor(unittest.TestCase):
 (0 rows)"""
 
         with patch.object(
-            self.monitor, "_execute_command", return_value=(psql_output, "", 0)
+            self.monitor, "execute_show", return_value=(psql_output, "", 0)
         ):
             task_groups = self.monitor.get_task_groups()
 
