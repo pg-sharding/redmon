@@ -54,8 +54,6 @@ Each iteration:
 python3 -m unittest discover -s . -p "test_*.py" -v
 ```
 
-Includes 25 unit and integration tests.
-
 ## Requirements
 
 - Python 3.10+

@@ -82,7 +82,7 @@ class SPQRMonitor:
 
         try:
             result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=30
+                cmd, shell=True, capture_output=True, text=True, timeout=90000
             )
             return result.stdout, result.stderr, result.returncode
         except subprocess.TimeoutExpired:
@@ -209,20 +209,30 @@ class SPQRMonitor:
 
         return None
 
-    def determine_target_shard(self, lower_bound: str, key_ranges: List[KeyRange]) -> Optional[str]:
-        """Determine target shard based on lower_bound."""
-        # Simple logic: find shard with fewest key ranges
-        shard_counts: Dict[str, int] = {}
-        for kr in key_ranges:
-            shard_counts[kr.shard_id] = shard_counts.get(kr.shard_id, 0) + 1
-
-        # Exclude shard0
-        shard_counts.pop("shard0", None)
-
-        if not shard_counts:
+    def determine_target_shard(self, lower_bound: str) -> Optional[str]:
+        """Determine target shard based on UUID lower_bound."""
+        # Extract UUID from lower_bound (format: '00000000-0000-0000-0000-000000000000')
+        uuid_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', lower_bound, re.IGNORECASE)
+        if not uuid_match:
+            self.logger.warning(f"Invalid UUID in lower_bound: {lower_bound}")
             return None
-
-        return min(shard_counts, key=shard_counts.get)
+        
+        uuid_str = uuid_match.group(1).lower()
+        first_hex = uuid_str[0]
+        
+        # Map first hex digit to shard: 0-1→001, 2-3→002, ..., e-f→008
+        hex_to_shard = {
+            '0': 'shard-001', '1': 'shard-001',
+            '2': 'shard-002', '3': 'shard-002',
+            '4': 'shard-003', '5': 'shard-003',
+            '6': 'shard-004', '7': 'shard-004',
+            '8': 'shard-005', '9': 'shard-005',
+            'a': 'shard-006', 'b': 'shard-006',
+            'c': 'shard-007', 'd': 'shard-007',
+            'e': 'shard-008', 'f': 'shard-008',
+        }
+        
+        return hex_to_shard.get(first_hex)
 
     def redistribute_key_range(
         self, key_range_id: str, target_shard: str, batch_size: int = 300000
@@ -288,7 +298,7 @@ class SPQRMonitor:
             self.logger.info("No key ranges to redistribute from shard0")
             return
 
-        target_shard = self.determine_target_shard(kr.lower_bound, key_ranges)
+        target_shard = self.determine_target_shard(kr.lower_bound)
         if not target_shard:
             self.logger.warning("Could not determine target shard")
             return

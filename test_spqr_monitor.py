@@ -149,24 +149,31 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertIsNone(kr)
 
     def test_determine_target_shard(self):
-        """Test determining target shard."""
-        key_ranges = [
-            KeyRange("kr1", "shard-001", "lb1"),
-            KeyRange("kr2", "shard-001", "lb2"),
-            KeyRange("kr3", "shard-002", "lb3"),
-            KeyRange("kr4", "shard0", "lb4"),
-        ]
-
-        target = self.monitor.determine_target_shard("'some-bound'", key_ranges)
+        """Test determining target shard based on UUID."""
+        # UUID starting with 0 -> shard-001
+        target = self.monitor.determine_target_shard("'00000000-0000-0000-0000-000000000000'")
+        self.assertEqual(target, "shard-001")
+        
+        # UUID starting with 2 -> shard-002
+        target = self.monitor.determine_target_shard("'2abc1234-5678-90ab-cdef-1234567890ab'")
         self.assertEqual(target, "shard-002")
+        
+        # UUID starting with e -> shard-008
+        target = self.monitor.determine_target_shard("'e0000000-0000-0000-0000-000000000000'")
+        self.assertEqual(target, "shard-008")
+        
+        # UUID starting with f -> shard-008
+        target = self.monitor.determine_target_shard("'ffffffff-ffff-ffff-ffff-ffffffffffff'")
+        self.assertEqual(target, "shard-008")
 
-    def test_determine_target_shard_no_shard(self):
-        """Test when no target shard can be determined."""
-        key_ranges = [
-            KeyRange("kr1", "shard0", "lb1"),
-        ]
-
-        target = self.monitor.determine_target_shard("'some-bound'", key_ranges)
+    def test_determine_target_shard_invalid_uuid(self):
+        """Test when invalid UUID is provided."""
+        # Invalid UUID format
+        target = self.monitor.determine_target_shard("'invalid-uuid'")
+        self.assertIsNone(target)
+        
+        # No UUID in string
+        target = self.monitor.determine_target_shard("'some-bound'")
         self.assertIsNone(target)
 
     def test_check_read_only_false(self):
