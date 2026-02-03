@@ -42,21 +42,24 @@ class TestIntegration(unittest.TestCase):
  kr_on_shard1 | shard-001 | ds_user_id | '00000000-0000-0000-0000-000000000002' | false"""
 
         with patch.object(
-            self.monitor, "_execute_command"
-        ) as mock_exec:
+            self.monitor, "execute_show"
+        ) as mock_show, patch.object(
+            self.monitor, "execute_write"
+        ) as mock_write:
             # Configure mock to return different responses for different calls
-            mock_exec.side_effect = [
+            mock_show.side_effect = [
                 (read_only_response, "", 0),  # check_read_only
                 (task_groups_response, "", 0),  # get_task_groups
-                ("", "", 0),  # retry_error_task_groups
                 (task_groups_response, "", 0),  # refresh task_groups
                 (key_ranges_response, "", 0),  # get_key_ranges
             ]
+            mock_write.return_value = ("", "", 0)  # retry_error_task_groups
 
             self.monitor.run_iteration()
 
-        # Verify execute_command was called
-        self.assertGreater(mock_exec.call_count, 0)
+        # Verify methods were called
+        self.assertGreater(mock_show.call_count, 0)
+        self.assertGreater(mock_write.call_count, 0)
 
     def test_full_iteration_all_running(self):
         """Test full iteration when all task groups are RUNNING and count < 8."""
@@ -75,9 +78,9 @@ class TestIntegration(unittest.TestCase):
  ds_user_id_kr_test1 | shard0 | ds_user_id | 'bound1' | false"""
 
         with patch.object(
-            self.monitor, "_execute_command"
-        ) as mock_exec:
-            mock_exec.side_effect = [
+            self.monitor, "execute_show"
+        ) as mock_show:
+            mock_show.side_effect = [
                 (read_only_response, "", 0),  # check_read_only
                 (task_groups_response, "", 0),  # get_task_groups (first call)
                 (task_groups_response, "", 0),  # get_task_groups (second call)
@@ -87,7 +90,7 @@ class TestIntegration(unittest.TestCase):
             self.monitor.run_iteration()
 
         # Should call multiple times
-        self.assertGreaterEqual(mock_exec.call_count, 3)
+        self.assertGreaterEqual(mock_show.call_count, 3)
 
     def test_full_iteration_read_only(self):
         """Test full iteration when database is in read-only mode."""
@@ -95,13 +98,13 @@ class TestIntegration(unittest.TestCase):
         read_only_response = " is_read_only \n--------------\n true"
 
         with patch.object(
-            self.monitor, "_execute_command"
-        ) as mock_exec:
-            mock_exec.return_value = (read_only_response, "", 0)
+            self.monitor, "execute_show"
+        ) as mock_show:
+            mock_show.return_value = (read_only_response, "", 0)
             self.monitor.run_iteration()
 
         # Should only call check_read_only
-        self.assertEqual(mock_exec.call_count, 1)
+        self.assertEqual(mock_show.call_count, 1)
 
     def test_dry_run_mode_commands(self):
         """Test that dry-run mode prints commands without executing."""
@@ -124,7 +127,7 @@ class TestIntegration(unittest.TestCase):
             )
 
             # Execute a command
-            stdout, stderr, code = monitor._execute_command("echo test")
+            stdout, stderr, code = monitor.execute_write("echo test")
 
             # Check output
             output = captured_output.getvalue()

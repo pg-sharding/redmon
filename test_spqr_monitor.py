@@ -32,10 +32,24 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertIn("user=spqr-console", cmd)
         self.assertIn("SHOW task_group;", cmd)
 
-    def test_execute_command_dry_run(self):
-        """Test command execution in dry-run mode."""
-        stdout, stderr, code = self.monitor._execute_command("echo test")
+    def test_execute_write_dry_run(self):
+        """Test write command execution in dry-run mode."""
+        stdout, stderr, code = self.monitor.execute_write("echo test")
         self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "")
+        self.assertEqual(code, 0)
+
+    @patch("subprocess.run")
+    def test_execute_show(self, mock_run):
+        """Test SHOW command execution (always runs)."""
+        mock_result = Mock()
+        mock_result.stdout = "test output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+        mock_run.return_value = mock_result
+
+        stdout, stderr, code = self.monitor.execute_show("echo test")
+        self.assertEqual(stdout, "test output")
         self.assertEqual(stderr, "")
         self.assertEqual(code, 0)
 
@@ -101,7 +115,7 @@ class TestSPQRMonitor(unittest.TestCase):
  ds_user_id_kr_02efa287_2bc8_4853_aa8f_b0e31d4d1f7d | shard0    | ds_user_id      | '02efa287-2bc8-4853-aa8f-b0e31d4d1f7d' | false"""
 
         with patch.object(
-            self.monitor, "_execute_command", return_value=(psql_output, "", 0)
+            self.monitor, "execute_show", return_value=(psql_output, "", 0)
         ):
             key_ranges = self.monitor.get_key_ranges()
 
@@ -180,7 +194,7 @@ class TestSPQRMonitor(unittest.TestCase):
         """Test checking read-only when false."""
         with patch.object(
             self.monitor,
-            "_execute_command",
+            "execute_show",
             return_value=(" is_read_only \n--------------\n false", "", 0),
         ):
             result = self.monitor.check_read_only()
@@ -191,7 +205,7 @@ class TestSPQRMonitor(unittest.TestCase):
         """Test checking read-only when true."""
         with patch.object(
             self.monitor,
-            "_execute_command",
+            "execute_show",
             return_value=(" is_read_only \n--------------\n true", "", 0),
         ):
             result = self.monitor.check_read_only()
@@ -243,7 +257,7 @@ class TestSPQRMonitor(unittest.TestCase):
         ]
 
         with patch.object(
-            self.monitor, "_execute_command", return_value=("", "", 0)
+            self.monitor, "execute_write", return_value=("", "", 0)
         ):
             count = self.monitor.retry_error_task_groups(task_groups)
 
@@ -257,7 +271,7 @@ class TestSPQRMonitor(unittest.TestCase):
         ]
 
         with patch.object(
-            self.monitor, "_execute_command", return_value=("", "", 0)
+            self.monitor, "execute_write", return_value=("", "", 0)
         ):
             count = self.monitor.retry_error_task_groups(task_groups)
 

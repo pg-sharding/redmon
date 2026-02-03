@@ -71,11 +71,22 @@ class SPQRMonitor:
             f'user={self.db_user}" -c "{sql}"'
         )
 
-    def _execute_command(self, cmd: str) -> Tuple[str, str, int]:
-        """
-        Execute command and return stdout, stderr, return code.
-        In dry-run mode, only prints command.
-        """
+    def execute_show(self, cmd: str) -> Tuple[str, str, int]:
+        """Execute SHOW command. Always executes regardless of dry-run mode."""
+        try:
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=30
+            )
+            return result.stdout, result.stderr, result.returncode
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"Command timeout: {cmd}")
+            return "", "Timeout", 1
+        except Exception as e:
+            self.logger.error(f"Command error: {e}")
+            return "", str(e), 1
+
+    def execute_write(self, cmd: str) -> Tuple[str, str, int]:
+        """Execute write command. In dry-run mode, only prints. Runs in separate process with 25h timeout."""
         if self.dry_run:
             print(cmd)
             return "", "", 0
@@ -95,7 +106,7 @@ class SPQRMonitor:
     def check_read_only(self) -> bool:
         """Check if database is in read-only mode."""
         cmd = self._psql_command("SHOW is_read_only;")
-        stdout, stderr, code = self._execute_command(cmd)
+        stdout, stderr, code = self.execute_show(cmd)
 
         if code != 0:
             self.logger.error(f"Failed to check read-only status: {stderr}")
@@ -110,7 +121,7 @@ class SPQRMonitor:
     def get_task_groups(self) -> List[TaskGroup]:
         """Get all task groups from database."""
         cmd = self._psql_command("SHOW task_group;")
-        stdout, stderr, code = self._execute_command(cmd)
+        stdout, stderr, code = self.execute_show(cmd)
 
         if code != 0:
             self.logger.error(f"Failed to get task groups: {stderr}")
@@ -150,7 +161,7 @@ class SPQRMonitor:
             cmd = (
                 self._psql_command(f"RETRY TASK GROUP '{tg.task_group_id}';")
             )
-            stdout, stderr, code = self._execute_command(cmd)
+            stdout, stderr, code = self.execute_write(cmd)
 
             if code != 0:
                 self.logger.error(
@@ -175,7 +186,7 @@ class SPQRMonitor:
     def get_key_ranges(self) -> List[KeyRange]:
         """Get all key ranges from database."""
         cmd = self._psql_command("SHOW key_ranges;")
-        stdout, stderr, code = self._execute_command(cmd)
+        stdout, stderr, code = self.execute_show(cmd)
 
         if code != 0:
             self.logger.error(f"Failed to get key ranges: {stderr}")
@@ -238,11 +249,6 @@ class SPQRMonitor:
         self, key_range_id: str, target_shard: str, batch_size: int = 300000
     ) -> bool:
         """Redistribute key range to target shard using tmux."""
-        if self.dry_run:
-            cmd = f"tmux new-session -d -s redistribute_{key_range_id} 'psql ... REDISTRIBUTE KEY RANGE {key_range_id} TO {target_shard} BATCH SIZE {batch_size};'"
-            print(cmd)
-            return True
-
         # Create tmux session to run long-lived command
         psql_cmd = (
             f'psql "port={self.db_port} dbname={self.db_name} '
@@ -252,7 +258,7 @@ class SPQRMonitor:
 
         tmux_cmd = f"tmux new-session -d -s redistribute_{key_range_id} '{psql_cmd}'"
 
-        _, stderr, code = self._execute_command(tmux_cmd)
+        _, stderr, code = self.execute_write(tmux_cmd)
 
         if code != 0:
             self.logger.error(
