@@ -149,9 +149,24 @@ class SPQRMonitor:
 
         return task_groups
 
+    def _is_retryable_error(self, error: Optional[str]) -> bool:
+        """Check if error is retryable."""
+        if not error:
+            return False
+        
+        retryable_errors = [
+            "etcdserver: request timed out, possibly due to previous leader failure",
+            "rpc error: code = Canceled desc = grpc: the client connection is closing",
+        ]
+        
+        return any(retryable in error for retryable in retryable_errors)
+
     def retry_error_task_groups(self, task_groups: List[TaskGroup]) -> int:
-        """Retry task groups with ERROR state. Max 4 retries per iteration."""
-        error_groups = [tg for tg in task_groups if tg.state == "ERROR"]
+        """Retry task groups with ERROR state and retryable errors. Max 4 retries per iteration."""
+        error_groups = [
+            tg for tg in task_groups 
+            if tg.state == "ERROR" and self._is_retryable_error(tg.error)
+        ]
 
         if not error_groups:
             return 0

@@ -227,9 +227,9 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertFalse(result)
 
     def test_retry_error_task_groups_success(self):
-        """Test retrying error task groups."""
+        """Test retrying error task groups with retryable errors."""
         task_groups = [
-            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "some error"),
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "rpc error: code = Canceled desc = grpc: the client connection is closing"),
             TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
         ]
 
@@ -243,7 +243,7 @@ class TestSPQRMonitor(unittest.TestCase):
     def test_retry_error_task_groups_max_4(self):
         """Test that max 4 task groups are retried per iteration."""
         task_groups = [
-            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR")
+            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "etcdserver: request timed out, possibly due to previous leader failure")
             for i in range(10)
         ]
 
@@ -253,6 +253,21 @@ class TestSPQRMonitor(unittest.TestCase):
             count = self.monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 4)
+
+    def test_retry_non_retryable_errors(self):
+        """Test that non-retryable errors are not retried."""
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "failed to split because bound intersects"),
+            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "some other error"),
+        ]
+
+        with patch.object(
+            self.monitor, "execute_write", return_value=("", "", 0)
+        ) as mock_write:
+            count = self.monitor.retry_error_task_groups(task_groups)
+
+        self.assertEqual(count, 0)
+        mock_write.assert_not_called()
 
     def test_redistribute_key_range_dry_run(self):
         """Test redistribute key range in dry-run mode."""
