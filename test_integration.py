@@ -29,17 +29,11 @@ class TestIntegration(unittest.TestCase):
         # Mock response: database is not read-only
         read_only_response = " is_read_only \n--------------\n false"
 
-        # Mock response: some task groups with errors
-        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | state | error
-----+---+---+---+---
- tg1 | shard-001 | kr1 | ERROR | rpc error: connection closed
- tg2 | shard-002 | kr2 | RUNNING |"""
-
-        # Mock response: key ranges including shard0
-        key_ranges_response = """key_range_id | shard_id | distribution_id | lower_bound | locked
----+---+---+---+---
- ds_user_id_kr_test1 | shard0 | ds_user_id | '00000000-0000-0000-0000-000000000001' | false
- kr_on_shard1 | shard-001 | ds_user_id | '00000000-0000-0000-0000-000000000002' | false"""
+        # Mock response: some task groups with retryable errors
+        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | move_task_id | state | error
+----+---+---+---+---+---+---
+ tg1 | shard-001 | kr1 | dst_kr1 | move1 | ERROR | rpc error: code = Canceled desc = grpc: the client connection is closing
+ tg2 | shard-002 | kr2 | dst_kr2 | move2 | RUNNING | """
 
         with patch.object(
             self.monitor, "execute_show"
@@ -50,16 +44,15 @@ class TestIntegration(unittest.TestCase):
             mock_show.side_effect = [
                 (read_only_response, "", 0),  # check_read_only
                 (task_groups_response, "", 0),  # get_task_groups
-                (task_groups_response, "", 0),  # refresh task_groups
-                (key_ranges_response, "", 0),  # get_key_ranges
             ]
             mock_write.return_value = ("", "", 0)  # retry_error_task_groups
 
             self.monitor.run_iteration()
 
         # Verify methods were called
-        self.assertGreater(mock_show.call_count, 0)
-        self.assertGreater(mock_write.call_count, 0)
+        self.assertEqual(mock_show.call_count, 2)  # read_only + task_groups
+        # Should have retried the error task group
+        self.assertEqual(mock_write.call_count, 1)  # One retry
 
     def test_full_iteration_all_running(self):
         """Test full iteration when all task groups are RUNNING and count < 8."""

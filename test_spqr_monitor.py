@@ -339,14 +339,16 @@ class TestSPQRMonitor(unittest.TestCase):
         )
         self.assertTrue(result)
 
-    @patch("subprocess.run")
-    def test_redistribute_key_range_prod(self, mock_run):
+    @patch("subprocess.Popen")
+    @patch("builtins.open", create=True)
+    def test_redistribute_key_range_prod(self, mock_open, mock_popen):
         """Test redistribute key range in production mode."""
-        mock_result = Mock()
-        mock_result.stdout = ""
-        mock_result.stderr = ""
-        mock_result.returncode = 0
-        mock_run.return_value = mock_result
+        mock_process = Mock()
+        mock_process.pid = 12345
+        mock_popen.return_value = mock_process
+        
+        mock_file = Mock()
+        mock_open.return_value = mock_file
 
         monitor = SPQRMonitor(
             db_host="localhost",
@@ -361,6 +363,8 @@ class TestSPQRMonitor(unittest.TestCase):
             "ds_user_id_kr_test", "shard-001"
         )
         self.assertTrue(result)
+        mock_popen.assert_called_once()
+        mock_open.assert_called_once()
 
 
 class TestLogging(unittest.TestCase):

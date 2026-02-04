@@ -12,6 +12,7 @@ import time
 import re
 import sys
 import random
+import hashlib
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
@@ -268,28 +269,53 @@ class SPQRMonitor:
     def redistribute_key_range(
         self, key_range_id: str, target_shard: str, batch_size: int = 300000
     ) -> bool:
-        """Redistribute key range to target shard using tmux."""
-        # Create tmux session to run long-lived command
-        psql_cmd = (
-            f'psql "port={self.db_port} dbname={self.db_name} '
-            f'user={self.db_user}" -c "REDISTRIBUTE KEY RANGE \'{key_range_id}\' '
-            f'TO \'{target_shard}\' BATCH SIZE {batch_size};"'
-        )
-
-        tmux_cmd = f"tmux new-session -d -s redistribute_{key_range_id} '{psql_cmd}'"
-
-        _, stderr, code = self.execute_write(tmux_cmd)
-
-        if code != 0:
+        """Redistribute key range to target shard as background process."""
+        # Create short identifier for log files
+        session_hash = hashlib.md5(key_range_id.encode()).hexdigest()[:8]
+        log_file = f"/var/log/spqr/redistribute_{session_hash}.log"
+        
+        # Build the SQL command
+        sql_cmd = f"REDISTRIBUTE KEY RANGE '{key_range_id}' TO '{target_shard}' BATCH SIZE {batch_size};"
+        
+        # Build psql command with individual flags
+        psql_args = [
+            "/usr/bin/psql",
+            "-p", str(self.db_port),
+            "-d", self.db_name,
+            "-U", self.db_user,
+            "-c", sql_cmd
+        ]
+        
+        if self.dry_run:
+            cmd_str = " ".join([f'"{arg}"' if " " in arg else arg for arg in psql_args])
+            print(f"Would run: {cmd_str} > {log_file} 2>&1 &")
+            return True
+        
+        try:
+            # Open log file for output
+            log_fd = open(log_file, "w")
+            
+            # Start background process
+            process = subprocess.Popen(
+                psql_args,
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+                start_new_session=True  # Detach from parent session
+            )
+            
+            self.logger.info(
+                f"Started redistribution of {key_range_id} to {target_shard} "
+                f"(PID: {process.pid}, log: {log_file})"
+            )
+            
+            # Don't wait for process to complete - it's a background task
+            return True
+            
+        except Exception as e:
             self.logger.error(
-                f"Failed to start redistribution for {key_range_id}: {stderr}"
+                f"Failed to start redistribution for {key_range_id}: {e}"
             )
             return False
-
-        self.logger.info(
-            f"Started redistribution of {key_range_id} to {target_shard} (tmux session)"
-        )
-        return True
 
     def run_iteration(self) -> None:
         """Run one iteration of monitoring."""
