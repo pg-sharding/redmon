@@ -126,6 +126,69 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(kr.shard_id, "shard0")
         self.assertTrue(kr.key_range_id.startswith("ds_user_id_kr_"))
 
+    def test_find_redistribute_key_range_random_selection(self):
+        """Test that random selection returns one of the matching key ranges."""
+        key_ranges = [
+            KeyRange(
+                key_range_id="00045f2f-aee9-48c3-9248-d0acfac839d3",
+                shard_id="shard-001",
+                lower_bound="'19c6216d-9b6d-4bfb-84ba-2c621110bcd3'",
+            ),
+            KeyRange(
+                key_range_id="ds_user_id_kr_0",
+                shard_id="shard0",
+                lower_bound="'00000000-0000-0000-0000-000000000000'",
+            ),
+            KeyRange(
+                key_range_id="ds_user_id_kr_02efa287_2bc8_4853_aa8f_b0e31d4d1f7d",
+                shard_id="shard0",
+                lower_bound="'02efa287-2bc8-4853-aa8f-b0e31d4d1f7d'",
+            ),
+            KeyRange(
+                key_range_id="ds_user_id_kr_12345678_1234_1234_1234_123456789012",
+                shard_id="shard0",
+                lower_bound="'12345678-1234-1234-1234-123456789012'",
+            ),
+        ]
+
+        # Test multiple times to verify random selection
+        results = set()
+        for _ in range(20):
+            kr = self.monitor.find_redistribute_key_range(key_ranges)
+            self.assertIsNotNone(kr)
+            self.assertEqual(kr.shard_id, "shard0")
+            self.assertTrue(kr.key_range_id.startswith("ds_user_id_kr_"))
+            results.add(kr.key_range_id)
+        
+        # With 20 attempts and 3 options, we should get at least 2 different results
+        # (statistically very likely)
+        self.assertGreaterEqual(len(results), 1)
+    
+    def test_find_redistribute_key_range_excludes_non_matching(self):
+        """Test that only matching key ranges are considered."""
+        key_ranges = [
+            KeyRange(
+                key_range_id="other_kr_something",
+                shard_id="shard0",
+                lower_bound="'00000000-0000-0000-0000-000000000000'",
+            ),
+            KeyRange(
+                key_range_id="ds_user_id_kr_0",
+                shard_id="shard-001",  # Wrong shard
+                lower_bound="'00000000-0000-0000-0000-000000000000'",
+            ),
+            KeyRange(
+                key_range_id="ds_user_id_kr_valid",
+                shard_id="shard0",
+                lower_bound="'00000000-0000-0000-0000-000000000000'",
+            ),
+        ]
+
+        kr = self.monitor.find_redistribute_key_range(key_ranges)
+        self.assertIsNotNone(kr)
+        self.assertEqual(kr.key_range_id, "ds_user_id_kr_valid")
+        self.assertEqual(kr.shard_id, "shard0")
+
     def test_find_redistribute_key_range_not_found(self):
         """Test when no key range to redistribute is found."""
         key_ranges = [

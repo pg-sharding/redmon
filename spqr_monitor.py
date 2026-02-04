@@ -11,6 +11,7 @@ import logging.handlers
 import time
 import re
 import sys
+import random
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
@@ -228,12 +229,16 @@ class SPQRMonitor:
         return key_ranges
 
     def find_redistribute_key_range(self, key_ranges: List[KeyRange]) -> Optional[KeyRange]:
-        """Find a key range matching pattern ds_user_id_kr_* from shard0."""
-        for kr in key_ranges:
-            if kr.key_range_id.startswith("ds_user_id_kr_") and kr.shard_id == "shard0":
-                return kr
-
-        return None
+        """Find a random key range matching pattern ds_user_id_kr_* from shard0."""
+        matching = [
+            kr for kr in key_ranges
+            if kr.key_range_id.startswith("ds_user_id_kr_") and kr.shard_id == "shard0"
+        ]
+        
+        if not matching:
+            return None
+        
+        return random.choice(matching)
 
     def determine_target_shard(self, lower_bound: str) -> Optional[str]:
         """Determine target shard based on UUID lower_bound."""
