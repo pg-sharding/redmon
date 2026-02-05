@@ -339,6 +339,7 @@ class SPQRMonitor:
 
         # Check if all running
         if self.all_running_enough(task_groups):
+            self.logger.info("Skipping redistribution: enough tasks already running")
             return
 
         # Get key ranges and find one to redistribute
