@@ -157,7 +157,7 @@ class SPQRMonitor:
             return False
         
         retryable_errors = [
-            "etcdserver: request timed out, possibly due to previous leader failure",
+            "etcdserver: request timed out",
             "rpc error: code = Canceled desc = grpc: the client connection is closing",
         ]
         

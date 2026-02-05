@@ -346,7 +346,7 @@ class TestSPQRMonitor(unittest.TestCase):
     def test_retry_error_task_groups_max_4(self):
         """Test that max 4 task groups are retried per iteration."""
         task_groups = [
-            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "etcdserver: request timed out, possibly due to previous leader failure")
+            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "etcdserver: request timed out")
             for i in range(10)
         ]
 
@@ -356,6 +356,38 @@ class TestSPQRMonitor(unittest.TestCase):
             count = self.monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 4)
+
+    def test_retry_etcdserver_timeout_short_message(self):
+        """Test retrying tasks with short etcdserver timeout error (without 'possibly due to')."""
+        task_groups = [
+            TaskGroup("tg1", "shard-007", "kr1", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("tg2", "shard-004", "kr2", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("tg3", "shard-008", "kr3", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("tg4", "shard-001", "kr4", "RUNNING"),
+        ]
+
+        with patch.object(
+            self.monitor, "execute_write", return_value=("", "", 0)
+        ):
+            count = self.monitor.retry_error_task_groups(task_groups)
+
+        # Should retry 3 error tasks (not the RUNNING one)
+        self.assertEqual(count, 3)
+
+    def test_retry_etcdserver_timeout_long_message(self):
+        """Test retrying tasks with long etcdserver timeout error (with 'possibly due to')."""
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "etcdserver: request timed out, possibly due to previous leader failure"),
+            TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
+        ]
+
+        with patch.object(
+            self.monitor, "execute_write", return_value=("", "", 0)
+        ):
+            count = self.monitor.retry_error_task_groups(task_groups)
+
+        # Should match because 'etcdserver: request timed out' is contained in the longer message
+        self.assertEqual(count, 1)
 
     def test_retry_non_retryable_errors(self):
         """Test that non-retryable errors are not retried."""
