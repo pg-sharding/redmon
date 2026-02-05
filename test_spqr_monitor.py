@@ -390,10 +390,20 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_retry_non_retryable_errors(self):
-        """Test that non-retryable errors are not retried."""
+        """Test that non-retryable errors are not retried.
+        
+        Tests specific real-world error messages that should NOT be retried:
+        - Duplicate key constraint violations
+        - Bound intersection errors
+        """
         task_groups = [
-            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "failed to split because bound intersects"),
-            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "some other error"),
+            TaskGroup("tg1", "shard-006", "kr1", "ERROR", 
+                     "could not move the data: ERROR: duplicate key value violates unique constraint \"table_unique_idx\" (SQLSTATE 23505)"),
+            TaskGroup("tg2", "shard-007", "kr2", "ERROR", 
+                     "failed to split because bound intersects with \"680dd8ad-fe87-4471-aa8f-96523bc10efc\" key range"),
+            TaskGroup("tg3", "shard-004", "kr3", "ERROR", 
+                     "failed to split because bound intersects with \"302f3e26-bf48-4c99-9c63-bab5b4d1f416\" key range"),
+            TaskGroup("tg4", "shard-001", "kr4", "ERROR", "some other error"),
         ]
 
         with patch.object(
