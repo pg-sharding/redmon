@@ -191,11 +191,11 @@ class SPQRMonitor:
         return retry_count
 
     def all_running_enough(self, task_groups: List[TaskGroup]) -> bool:
-        """Check if all task groups are RUNNING and count >= 8."""
+        """Check if there are 8 or more RUNNING task groups."""
         running = [tg for tg in task_groups if tg.state == "RUNNING"]
 
-        if len(running) == len(task_groups) and len(running) >= 8:
-            self.logger.info("All task groups are RUNNING and count >= 8")
+        if len(running) >= 8:
+            self.logger.info(f"Already have {len(running)} RUNNING task groups (>= 8)")
             return True
 
         return False

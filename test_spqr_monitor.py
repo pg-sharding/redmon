@@ -269,7 +269,7 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertTrue(result)
 
     def test_all_running_enough_false_not_running(self):
-        """Test all_running_enough when not all are running."""
+        """Test all_running_enough when running count < 8."""
         task_groups = [
             TaskGroup("tg1", "shard-001", "kr1", "RUNNING"),
             TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
@@ -288,6 +288,46 @@ class TestSPQRMonitor(unittest.TestCase):
 
         result = self.monitor.all_running_enough(task_groups)
         self.assertFalse(result)
+
+    def test_all_running_enough_real_world_scenario(self):
+        """Test all_running_enough with real-world data: 11 RUNNING + 8 ERROR tasks.
+        
+        This is the bug fix test - previously the function would return False
+        if not ALL tasks were RUNNING (checking len(running) == len(task_groups)),
+        causing it to start more than 8 redistribution tasks simultaneously.
+        
+        Now it correctly returns True when there are >= 8 RUNNING tasks,
+        regardless of ERROR or other states.
+        
+        Real example: 19 total tasks with 11 RUNNING and 8 ERROR should stop
+        new redistributions from starting.
+        """
+        task_groups = [
+            # 11 RUNNING tasks, 8 ERROR tasks
+            TaskGroup("57cf6b02-3925-4c72-be9f-0dc98747edb6", "shard-002", "ds_user_id_kr_3d000000_0000_0000_0000_000000000000", "RUNNING"),
+            TaskGroup("acb3716d-2bef-41aa-8ae0-d0ab6838ea93", "shard-001", "ds_user_id_kr_061f5376_dc31_427f_96e6_0812efd130de", "RUNNING"),
+            TaskGroup("a38eca6c-c3a3-4405-90bc-e3beb48bca5d", "shard-008", "ds_user_id_kr_e22933c6_47cb_4f37_a406_4a22520e9aba", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("ba0ed875-7ab9-4359-886e-e766da93d547", "shard-004", "ds_user_id_kr_621c5280_a79c_4686_9c54_2f07b48e49db", "ERROR", "failed to split because bound intersects"),
+            TaskGroup("ab4877a7-61ea-465e-8bf5-514719e3128a", "shard-004", "ds_user_id_kr_6b2593b7_52de_417a_ad43_76cf67b87a99", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("9eaaf2d3-5696-42d9-9b99-4fcf47689296", "shard-007", "ds_user_id_kr_cf6b8fc2_cfb4_4dbc_99b8_d9523c9aea20", "RUNNING"),
+            TaskGroup("6a4128d8-c522-49b5-a132-62a3cbb98b53", "shard-007", "ds_user_id_kr_d78c737b_e178_4658_aacf_4e9e694b4357", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("41932f71-6776-4959-a1cf-606a565b0112", "shard-004", "ds_user_id_kr_7cb49909_2d48_46dd_a383_bb1af163d50c", "RUNNING"),
+            TaskGroup("b528fb8f-2487-4ba6-b216-cab01be03518", "shard-006", "ds_user_id_kr_b255f952_a0b9_4095_bb94_d90d248013b3", "ERROR", "could not move the data"),
+            TaskGroup("a1a78c3d-6a61-44e4-9f9b-31ac8b044c3a", "shard-004", "ds_user_id_kr_621c5280_a79c_4686_9c54_2f07b48e49db", "RUNNING"),
+            TaskGroup("85b7feec-8a95-49e8-bb87-2764f28a9b23", "shard-003", "ds_user_id_kr_55d88de1_71b3_4c2a_a1d2_a0e0c0f3ec9f", "RUNNING"),
+            TaskGroup("e55e0c85-ad55-414e-a5fd-705056c3e679", "shard-003", "ds_user_id_kr_4f0fb40f_c8db_42b2_85c5_2e6a3f04f6a6", "RUNNING"),
+            TaskGroup("5f36ca29-00be-4087-a74d-fd0daa016fae", "shard-007", "ds_user_id_kr_c0967011_2e83_4980_af15_28c95ca89aa5", "ERROR", "failed to split because bound intersects"),
+            TaskGroup("e1a8084b-5063-48c0-84b4-9b9c355d4324", "shard-007", "ds_user_id_kr_c0967011_2e83_4980_af15_28c95ca89aa5", "RUNNING"),
+            TaskGroup("67cf2700-6c3b-4161-b5b6-a293bbd5016a", "shard-002", "ds_user_id_kr_36a1d0b8_c43f_4422_afab_8dbb25da60ff", "RUNNING"),
+            TaskGroup("3f892bb6-9c41-4d1d-9853-a3baa2591405", "shard-004", "ds_user_id_kr_788b7ee2_45b0_4b6e_abf5_ebf3d59e1248", "RUNNING"),
+            TaskGroup("732c4f17-d1da-4556-b7ea-a80efe8b1b0c", "shard-005", "ds_user_id_kr_8d963908_f5f3_4065_bb3e_45d813d9351b", "RUNNING"),
+            TaskGroup("5d857a33-d940-4077-a450-1c7c770f6b3c", "shard-006", "ds_user_id_kr_aaa910ba_7039_4d88_88e3_06fc86d04a95", "RUNNING"),
+            TaskGroup("70ad8bc5-fdda-469a-bc74-abb99536ad36", "shard-004", "ds_user_id_kr_7ed32a5e_5c69_4eca_b789_f084ab5cfd80", "RUNNING"),
+        ]
+
+        result = self.monitor.all_running_enough(task_groups)
+        # With 11 RUNNING tasks (>= 8), should return True to prevent starting more
+        self.assertTrue(result)
 
     def test_retry_error_task_groups_success(self):
         """Test retrying error task groups with retryable errors."""
