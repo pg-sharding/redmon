@@ -46,6 +46,7 @@ class SPQRMonitor:
         db_name: str,
         db_user: str,
         dry_run: bool = False,
+        no_retry_errors: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
         self.db_host = db_host
@@ -53,6 +54,7 @@ class SPQRMonitor:
         self.db_name = db_name
         self.db_user = db_user
         self.dry_run = dry_run
+        self.no_retry_errors = no_retry_errors
         self.logger = logger or self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
@@ -115,7 +117,6 @@ class SPQRMonitor:
             return False
 
         if "true" in stdout.lower():
-            self.logger.warning("Database is in read-only mode, skipping iteration")
             return True
 
         return False
@@ -172,6 +173,8 @@ class SPQRMonitor:
 
         if not error_groups:
             return 0
+        
+        self.logger.info(f"Found {len(error_groups)} task groups with retryable errors")
 
         retry_count = 0
         for tg in error_groups[:4]:  # Max 4 retries
@@ -323,19 +326,25 @@ class SPQRMonitor:
 
         # Check read-only
         if self.check_read_only():
+            self.logger.warning("Database is in read-only mode, skipping iteration")
             return
 
         # Get and retry error task groups
         task_groups = self.get_task_groups()
         self.logger.info(f"Found {len(task_groups)} task groups")
 
-        retry_count = self.retry_error_task_groups(task_groups)
-        if retry_count > 0:
-            self.logger.info(f"Retried {retry_count} task groups")
-            return
+        if not self.no_retry_errors:
+            retry_count = self.retry_error_task_groups(task_groups)
+            if retry_count > 0:
+                self.logger.info(f"Retried {retry_count} task groups, skipping redistribution this iteration")
+                return
+            
+            self.logger.info("No error task groups to retry, proceeding to redistribution check")
 
-        # Refresh task groups after retry
-        task_groups = self.get_task_groups()
+            # Refresh task groups after retry
+            task_groups = self.get_task_groups()
+        else:
+            self.logger.info("Error retry disabled, proceeding to redistribution check")
 
         # Check if all running
         if self.all_running_enough(task_groups):
@@ -439,6 +448,11 @@ def main():
         action="store_true",
         help="Dry-run mode: only print commands without executing",
     )
+    parser.add_argument(
+        "--no-retry-errors",
+        action="store_true",
+        help="Disable automatic retry of error task groups",
+    )
 
     args = parser.parse_args()
 
@@ -450,6 +464,7 @@ def main():
         db_name=args.db_name,
         db_user=args.db_user,
         dry_run=args.dry_run,
+        no_retry_errors=args.no_retry_errors,
         logger=logger,
     )
 

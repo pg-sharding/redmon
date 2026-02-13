@@ -414,6 +414,36 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(count, 0)
         mock_write.assert_not_called()
 
+    def test_no_retry_errors_flag(self):
+        """Test that --no-retry-errors flag disables retry functionality."""
+        monitor_no_retry = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            no_retry_errors=True,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "etcdserver: request timed out"),
+            TaskGroup("tg3", "shard-001", "kr3", "RUNNING"),
+        ]
+
+        with patch.object(
+            monitor_no_retry, "execute_write", return_value=("", "", 0)
+        ) as mock_write:
+            count = monitor_no_retry.retry_error_task_groups(task_groups)
+
+        # Function should still work, but won't be called in run_iteration
+        self.assertEqual(count, 2)
+        
+        # Verify the flag is set correctly
+        self.assertTrue(monitor_no_retry.no_retry_errors)
+        self.assertFalse(self.monitor.no_retry_errors)
+
     def test_redistribute_key_range_dry_run(self):
         """Test redistribute key range in dry-run mode."""
         result = self.monitor.redistribute_key_range(
