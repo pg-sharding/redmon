@@ -329,6 +329,114 @@ class TestSPQRMonitor(unittest.TestCase):
         # With 11 RUNNING tasks (>= 8), should return True to prevent starting more
         self.assertTrue(result)
 
+    def test_max_failed_tasks_threshold_not_exceeded(self):
+        """Test that monitor continues when failed tasks are within threshold."""
+        monitor_with_limit = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_failed_tasks=10,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "some error"),
+            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "some error"),
+            TaskGroup("tg3", "shard-001", "kr3", "ERROR", "some error"),
+            TaskGroup("tg4", "shard-001", "kr4", "RUNNING"),
+            TaskGroup("tg5", "shard-001", "kr5", "RUNNING"),
+        ]
+        
+        with patch.object(monitor_with_limit, "check_read_only", return_value=False):
+            with patch.object(monitor_with_limit, "get_task_groups", return_value=task_groups):
+                with patch.object(monitor_with_limit, "retry_error_task_groups", return_value=0):
+                    with patch.object(monitor_with_limit, "all_running_enough", return_value=True):
+                        # Should not raise SystemExit because 3 < 10
+                        monitor_with_limit.run_iteration()
+
+    def test_max_failed_tasks_threshold_exceeded(self):
+        """Test that monitor exits when failed tasks exceed threshold."""
+        monitor_with_limit = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_failed_tasks=5,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "some error"),
+            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "some error"),
+            TaskGroup("tg3", "shard-001", "kr3", "ERROR", "some error"),
+            TaskGroup("tg4", "shard-001", "kr4", "ERROR", "some error"),
+            TaskGroup("tg5", "shard-001", "kr5", "ERROR", "some error"),
+            TaskGroup("tg6", "shard-001", "kr6", "ERROR", "some error"),
+            TaskGroup("tg7", "shard-001", "kr7", "RUNNING"),
+        ]
+        
+        with patch.object(monitor_with_limit, "check_read_only", return_value=False):
+            with patch.object(monitor_with_limit, "get_task_groups", return_value=task_groups):
+                # Should raise SystemExit because 6 > 5
+                with self.assertRaises(SystemExit) as cm:
+                    monitor_with_limit.run_iteration()
+                self.assertEqual(cm.exception.code, 1)
+
+    def test_max_failed_tasks_exact_threshold(self):
+        """Test that monitor continues when failed tasks equal threshold (not exceeded)."""
+        monitor_with_limit = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_failed_tasks=5,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup("tg1", "shard-001", "kr1", "ERROR", "some error"),
+            TaskGroup("tg2", "shard-001", "kr2", "ERROR", "some error"),
+            TaskGroup("tg3", "shard-001", "kr3", "ERROR", "some error"),
+            TaskGroup("tg4", "shard-001", "kr4", "ERROR", "some error"),
+            TaskGroup("tg5", "shard-001", "kr5", "ERROR", "some error"),
+            TaskGroup("tg6", "shard-001", "kr6", "RUNNING"),
+        ]
+        
+        with patch.object(monitor_with_limit, "check_read_only", return_value=False):
+            with patch.object(monitor_with_limit, "get_task_groups", return_value=task_groups):
+                with patch.object(monitor_with_limit, "retry_error_task_groups", return_value=0):
+                    with patch.object(monitor_with_limit, "all_running_enough", return_value=True):
+                        # Should not raise SystemExit because 5 == 5 (not exceeded)
+                        monitor_with_limit.run_iteration()
+
+    def test_max_failed_tasks_none_disables_check(self):
+        """Test that max_failed_tasks=None disables the check."""
+        monitor_no_limit = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_failed_tasks=None,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "some error")
+            for i in range(100)  # 100 failed tasks
+        ]
+        
+        with patch.object(monitor_no_limit, "check_read_only", return_value=False):
+            with patch.object(monitor_no_limit, "get_task_groups", return_value=task_groups):
+                with patch.object(monitor_no_limit, "retry_error_task_groups", return_value=0):
+                    with patch.object(monitor_no_limit, "all_running_enough", return_value=True):
+                        # Should not raise SystemExit even with 100 failed tasks
+                        monitor_no_limit.run_iteration()
+
     def test_retry_error_task_groups_success(self):
         """Test retrying error task groups with retryable errors."""
         task_groups = [
