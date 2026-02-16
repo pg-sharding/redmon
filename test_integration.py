@@ -30,10 +30,10 @@ class TestIntegration(unittest.TestCase):
         read_only_response = " is_read_only \n--------------\n false"
 
         # Mock response: some task groups with retryable errors
-        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | move_task_id | state | error
-----+---+---+---+---+---+---
- tg1 | shard-001 | kr1 | dst_kr1 | move1 | ERROR | rpc error: code = Canceled desc = grpc: the client connection is closing
- tg2 | shard-002 | kr2 | dst_kr2 | move2 | RUNNING | """
+        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | batch_size | move_task_id | state | error
+----+---+---+---+---+---+---+---
+ tg1 | shard-001 | kr1 | dst_kr1 | 300000 | move1 | ERROR | rpc error: code = Canceled desc = grpc: the client connection is closing
+ tg2 | shard-002 | kr2 | dst_kr2 | 300000 | move2 | RUNNING | """
 
         # Mock response: key ranges
         key_ranges_response = """key_range_id | shard_id | distribution_id | lower_bound | locked
@@ -68,10 +68,10 @@ class TestIntegration(unittest.TestCase):
 
         # Mock response: some task groups are RUNNING (less than 8)
         # This will trigger key range redistribution
-        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | state | error
-----+---+---+---+---
- tg1 | shard-001 | kr1 | RUNNING |
- tg2 | shard-001 | kr2 | RUNNING |"""
+        task_groups_response = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | batch_size | move_task_id | state | error
+----+---+---+---+---+---+---+---
+ tg1 | shard-001 | kr1 | dst_kr1 | 300000 | move1 | RUNNING |
+ tg2 | shard-001 | kr2 | dst_kr2 | 300000 | move2 | RUNNING |"""
 
         key_ranges_response = """key_range_id | shard_id | distribution_id | lower_bound | locked
 ----+---+---+---+---

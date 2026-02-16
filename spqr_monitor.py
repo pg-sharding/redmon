@@ -147,8 +147,8 @@ class SPQRMonitor:
                     task_group_id=parts[0],
                     destination_shard_id=parts[1],
                     source_key_range_id=parts[2],
-                    state=parts[5],
-                    error=parts[6] if parts[6] else None,
+                    state=parts[6],
+                    error=parts[7] if len(parts) > 7 and parts[7] else None,
                 )
             )
 

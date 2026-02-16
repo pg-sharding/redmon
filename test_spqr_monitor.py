@@ -55,11 +55,11 @@ class TestSPQRMonitor(unittest.TestCase):
 
     def test_parse_task_groups_success(self):
         """Test parsing task groups from psql output."""
-        psql_output = """                             task_group_id             | destination_shard_id |                source_key_range_id                 |       destination_key_range_id       |             move_task_id             |  state  |                                             error
---------------------------------------+----------------------+----------------------------------------------------+--------------------------------------+--------------------------------------+---------+------------------------------------------------------------------------------------------------
- 07f8dd64-b60a-452d-8c8c-36053b266d60 | shard-005            | ds_user_id_kr_8895479c_634d_4bff_bd0b_6c31f2bd6da5 | f366d2af-1107-42b3-9e68-314aa2cdea0f | fee0b99d-c6af-420d-b415-f25afdf47352 | ERROR   | rpc error: code = Canceled desc = grpc: the client connection is closing
- 69cc1380-1a41-44a4-b100-7c340ad450c4 | shard-001            | ds_user_id_kr_19bd3e99_d339_48ff_88de_6072b852d0ee | 00045f2f-aee9-48c3-9248-d0acfac839d3 | cde66b67-0a68-4526-a91e-a202d66a2f00 | ERROR   | rpc error: code = Canceled desc = grpc: the client connection is closing
- 5f6d8069-3794-4442-8750-fa0cdfe3b721 | shard-001            | ds_user_id_kr_0584766d_9c2c_438a_8c0c_28678d8954af | b4674c92-1a01-4a8e-8764-b4961a98e352 | 00cf8b2d-6b57-48cd-81b8-76cbc798ad90 | RUNNING |"""
+        psql_output = """                             task_group_id             | destination_shard_id |                source_key_range_id                 |       destination_key_range_id       | batch_size |             move_task_id             |  state  |                                             error
+--------------------------------------+----------------------+----------------------------------------------------+--------------------------------------+------------+--------------------------------------+---------+------------------------------------------------------------------------------------------------
+ 07f8dd64-b60a-452d-8c8c-36053b266d60 | shard-005            | ds_user_id_kr_8895479c_634d_4bff_bd0b_6c31f2bd6da5 | f366d2af-1107-42b3-9e68-314aa2cdea0f | 300000     | fee0b99d-c6af-420d-b415-f25afdf47352 | ERROR   | rpc error: code = Canceled desc = grpc: the client connection is closing
+ 69cc1380-1a41-44a4-b100-7c340ad450c4 | shard-001            | ds_user_id_kr_19bd3e99_d339_48ff_88de_6072b852d0ee | 00045f2f-aee9-48c3-9248-d0acfac839d3 | 300000     | cde66b67-0a68-4526-a91e-a202d66a2f00 | ERROR   | rpc error: code = Canceled desc = grpc: the client connection is closing
+ 5f6d8069-3794-4442-8750-fa0cdfe3b721 | shard-001            | ds_user_id_kr_0584766d_9c2c_438a_8c0c_28678d8954af | b4674c92-1a01-4a8e-8764-b4961a98e352 | 300000     | 00cf8b2d-6b57-48cd-81b8-76cbc798ad90 | RUNNING |"""
 
         with patch.object(
             self.monitor, "execute_show", return_value=(psql_output, "", 0)
@@ -73,7 +73,7 @@ class TestSPQRMonitor(unittest.TestCase):
 
     def test_parse_task_groups_empty(self):
         """Test parsing empty task groups."""
-        psql_output = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | move_task_id | state | error
+        psql_output = """task_group_id | destination_shard_id | source_key_range_id | destination_key_range_id | batch_size | move_task_id | state | error
 (0 rows)"""
 
         with patch.object(
