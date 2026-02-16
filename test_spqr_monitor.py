@@ -522,7 +522,7 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(count, 0)
         mock_write.assert_not_called()
 
-    def test_no_retry_errors_flag(self):
+    def test_retry_errors_flag(self):
         """Test that --no-retry-errors flag disables retry functionality."""
         monitor_no_retry = SPQRMonitor(
             db_host="localhost",
@@ -530,7 +530,7 @@ class TestSPQRMonitor(unittest.TestCase):
             db_name="spqr-console",
             db_user="spqr-console",
             dry_run=True,
-            no_retry_errors=True,
+            retry_errors=False,
             logger=self.logger,
         )
         
@@ -549,8 +549,8 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(count, 2)
         
         # Verify the flag is set correctly
-        self.assertTrue(monitor_no_retry.no_retry_errors)
-        self.assertFalse(self.monitor.no_retry_errors)
+        self.assertFalse(monitor_no_retry.retry_errors)
+        self.assertFalse(self.monitor.retry_errors)
 
     def test_redistribute_key_range_dry_run(self):
         """Test redistribute key range in dry-run mode."""

@@ -46,7 +46,7 @@ class SPQRMonitor:
         db_name: str,
         db_user: str,
         dry_run: bool = False,
-        no_retry_errors: bool = False,
+        retry_errors: bool = False,
         max_failed_tasks: Optional[int] = None,
         logger: Optional[logging.Logger] = None,
     ):
@@ -55,7 +55,7 @@ class SPQRMonitor:
         self.db_name = db_name
         self.db_user = db_user
         self.dry_run = dry_run
-        self.no_retry_errors = no_retry_errors
+        self.retry_errors = retry_errors
         self.max_failed_tasks = max_failed_tasks
         self.logger = logger or self._setup_logger()
 
@@ -197,6 +197,7 @@ class SPQRMonitor:
 
     def all_running_enough(self, task_groups: List[TaskGroup]) -> bool:
         """Check if there are 8 or more RUNNING task groups."""
+        # TODO make configurable threshold
         running = [tg for tg in task_groups if tg.state == "RUNNING"]
 
         if len(running) >= 8:
@@ -335,24 +336,22 @@ class SPQRMonitor:
         task_groups = self.get_task_groups()
         self.logger.info(f"Found {len(task_groups)} task groups")
 
+        failed_tasks = [tg for tg in task_groups if tg.state == "ERROR"]
+        failed_count = len(failed_tasks)
+        self.logger.info(f"Failed tasks count: {failed_count}")
+
         # Check if failed tasks exceed threshold
         if self.max_failed_tasks is not None:
-            failed_tasks = [tg for tg in task_groups if tg.state == "ERROR"]
-            failed_count = len(failed_tasks)
             if failed_count > self.max_failed_tasks:
-                self.logger.error(
-                    f"Failed tasks ({failed_count}) exceeded threshold ({self.max_failed_tasks}). Exiting."
-                )
+                self.logger.error(f"Failed tasks exceeded threshold ({self.max_failed_tasks}). Exiting.")
                 sys.exit(1)
 
-        if not self.no_retry_errors:
+        if self.retry_errors:
             retry_count = self.retry_error_task_groups(task_groups)
             if retry_count > 0:
                 self.logger.info(f"Retried {retry_count} task groups, skipping redistribution this iteration")
                 return
-            
             self.logger.info("No error task groups to retry, proceeding to redistribution check")
-
             # Refresh task groups after retry
             task_groups = self.get_task_groups()
         else:
@@ -461,9 +460,9 @@ def main():
         help="Dry-run mode: only print commands without executing",
     )
     parser.add_argument(
-        "--no-retry-errors",
+        "--retry-errors",
         action="store_true",
-        help="Disable automatic retry of error task groups",
+        help="Enable automatic retry of error task groups",
     )
     parser.add_argument(
         "--max-failed-tasks",
@@ -482,7 +481,7 @@ def main():
         db_name=args.db_name,
         db_user=args.db_user,
         dry_run=args.dry_run,
-        no_retry_errors=args.no_retry_errors,
+        retry_errors=args.retry_errors,
         max_failed_tasks=args.max_failed_tasks,
         logger=logger,
     )

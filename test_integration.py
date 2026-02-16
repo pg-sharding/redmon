@@ -35,24 +35,31 @@ class TestIntegration(unittest.TestCase):
  tg1 | shard-001 | kr1 | dst_kr1 | move1 | ERROR | rpc error: code = Canceled desc = grpc: the client connection is closing
  tg2 | shard-002 | kr2 | dst_kr2 | move2 | RUNNING | """
 
+        # Mock response: key ranges
+        key_ranges_response = """key_range_id | shard_id | distribution_id | lower_bound | locked
+----+---+---+---+---
+ ds_user_id_kr_test | shard0 | ds_user_id | '00000000-0000-0000-0000-000000000000' | false
+ ds_user_id_kr_other | shard-001 | ds_user_id | '80000000-0000-0000-0000-000000000000' | false"""
+
         with patch.object(
             self.monitor, "execute_show"
         ) as mock_show, patch.object(
-            self.monitor, "execute_write"
-        ) as mock_write:
+            self.monitor, "redistribute_key_range"
+        ) as mock_redistribute:
             # Configure mock to return different responses for different calls
             mock_show.side_effect = [
                 (read_only_response, "", 0),  # check_read_only
                 (task_groups_response, "", 0),  # get_task_groups
+                (key_ranges_response, "", 0),  # get_key_ranges
             ]
-            mock_write.return_value = ("", "", 0)  # retry_error_task_groups
+            mock_redistribute.return_value = True  # redistribute_key_range
 
             self.monitor.run_iteration()
 
         # Verify methods were called
-        self.assertEqual(mock_show.call_count, 2)  # read_only + task_groups
-        # Should have retried the error task group
-        self.assertEqual(mock_write.call_count, 1)  # One retry
+        self.assertEqual(mock_show.call_count, 3)  # read_only + task_groups + key_ranges
+        # Should have called redistribute (not retry, since retry_errors is False)
+        self.assertEqual(mock_redistribute.call_count, 1)  # One redistribute command
 
     def test_full_iteration_all_running(self):
         """Test full iteration when all task groups are RUNNING and count < 8."""
