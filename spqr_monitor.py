@@ -48,6 +48,7 @@ class SPQRMonitor:
         dry_run: bool = False,
         retry_errors: bool = False,
         max_failed_tasks: Optional[int] = None,
+        max_running_tasks: int = 8,
         logger: Optional[logging.Logger] = None,
     ):
         self.db_host = db_host
@@ -57,6 +58,7 @@ class SPQRMonitor:
         self.dry_run = dry_run
         self.retry_errors = retry_errors
         self.max_failed_tasks = max_failed_tasks
+        self.max_running_tasks = max_running_tasks
         self.logger = logger or self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
@@ -196,12 +198,11 @@ class SPQRMonitor:
         return retry_count
 
     def all_running_enough(self, task_groups: List[TaskGroup]) -> bool:
-        """Check if there are 8 or more RUNNING task groups."""
-        # TODO make configurable threshold
+        """Check if there are enough RUNNING task groups based on threshold."""
         running = [tg for tg in task_groups if tg.state == "RUNNING"]
 
-        if len(running) >= 8:
-            self.logger.info(f"Already have {len(running)} RUNNING task groups (>= 8)")
+        if len(running) >= self.max_running_tasks:
+            self.logger.info(f"Already have {len(running)} RUNNING task groups (>= {self.max_running_tasks})")
             return True
 
         return False
@@ -470,6 +471,12 @@ def main():
         default=10,
         help="Exit if number of failed tasks exceeds this threshold (default: 10)",
     )
+    parser.add_argument(
+        "--max-running-tasks",
+        type=int,
+        default=8,
+        help="Skip redistribution if this many task groups are already running (default: 8)",
+    )
 
     args = parser.parse_args()
 
@@ -483,6 +490,7 @@ def main():
         dry_run=args.dry_run,
         retry_errors=args.retry_errors,
         max_failed_tasks=args.max_failed_tasks,
+        max_running_tasks=args.max_running_tasks,
         logger=logger,
     )
 
