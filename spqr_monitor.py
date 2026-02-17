@@ -344,8 +344,8 @@ class SPQRMonitor:
         # Check if failed tasks exceed threshold
         if self.max_failed_tasks is not None:
             if failed_count > self.max_failed_tasks:
-                self.logger.error(f"Failed tasks exceeded threshold ({self.max_failed_tasks}). Exiting.")
-                sys.exit(1)
+                self.logger.error(f"Failed tasks exceeded threshold ({self.max_failed_tasks}). Skipping iteration.")
+                return
 
         if self.retry_errors:
             retry_count = self.retry_error_task_groups(task_groups)

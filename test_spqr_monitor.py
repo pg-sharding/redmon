@@ -357,7 +357,7 @@ class TestSPQRMonitor(unittest.TestCase):
                         monitor_with_limit.run_iteration()
 
     def test_max_failed_tasks_threshold_exceeded(self):
-        """Test that monitor exits when failed tasks exceed threshold."""
+        """Test that monitor skips iteration when failed tasks exceed threshold."""
         monitor_with_limit = SPQRMonitor(
             db_host="localhost",
             db_port=6432,
@@ -380,10 +380,9 @@ class TestSPQRMonitor(unittest.TestCase):
         
         with patch.object(monitor_with_limit, "check_read_only", return_value=False):
             with patch.object(monitor_with_limit, "get_task_groups", return_value=task_groups):
-                # Should raise SystemExit because 6 > 5
-                with self.assertRaises(SystemExit) as cm:
-                    monitor_with_limit.run_iteration()
-                self.assertEqual(cm.exception.code, 1)
+                # Should return early (skip iteration) because 6 > 5
+                monitor_with_limit.run_iteration()
+                # If we get here without exception, the test passes
 
     def test_max_failed_tasks_exact_threshold(self):
         """Test that monitor continues when failed tasks equal threshold (not exceeded)."""
