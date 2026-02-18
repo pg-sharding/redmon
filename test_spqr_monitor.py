@@ -443,10 +443,7 @@ class TestSPQRMonitor(unittest.TestCase):
             TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
         ]
 
-        with patch.object(
-            self.monitor, "execute_write", return_value=("", "", 0)
-        ):
-            count = self.monitor.retry_error_task_groups(task_groups)
+        count = self.monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 1)
 
@@ -468,10 +465,7 @@ class TestSPQRMonitor(unittest.TestCase):
             for i in range(10)
         ]
 
-        with patch.object(
-            monitor, "execute_write", return_value=("", "", 0)
-        ):
-            count = monitor.retry_error_task_groups(task_groups)
+        count = monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 4)
 
@@ -482,10 +476,7 @@ class TestSPQRMonitor(unittest.TestCase):
             for i in range(10)
         ]
 
-        with patch.object(
-            self.monitor, "execute_write", return_value=("", "", 0)
-        ):
-            count = self.monitor.retry_error_task_groups(task_groups)
+        count = self.monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 1)
 
@@ -509,10 +500,7 @@ class TestSPQRMonitor(unittest.TestCase):
             TaskGroup("tg4", "shard-001", "kr4", "RUNNING"),
         ]
 
-        with patch.object(
-            monitor, "execute_write", return_value=("", "", 0)
-        ):
-            count = monitor.retry_error_task_groups(task_groups)
+        count = monitor.retry_error_task_groups(task_groups)
 
         # Should retry 3 error tasks (not the RUNNING one)
         self.assertEqual(count, 3)
@@ -524,10 +512,7 @@ class TestSPQRMonitor(unittest.TestCase):
             TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
         ]
 
-        with patch.object(
-            self.monitor, "execute_write", return_value=("", "", 0)
-        ):
-            count = self.monitor.retry_error_task_groups(task_groups)
+        count = self.monitor.retry_error_task_groups(task_groups)
 
         # Should match because 'etcdserver: request timed out' is contained in the longer message
         self.assertEqual(count, 1)
@@ -550,12 +535,12 @@ class TestSPQRMonitor(unittest.TestCase):
         ]
 
         with patch.object(
-            self.monitor, "execute_write", return_value=("", "", 0)
-        ) as mock_write:
+            self.monitor, "retry_task_group_async", return_value=True
+        ) as mock_retry:
             count = self.monitor.retry_error_task_groups(task_groups)
 
         self.assertEqual(count, 0)
-        mock_write.assert_not_called()
+        mock_retry.assert_not_called()
 
     def test_retry_errors_flag(self):
         """Test that --no-retry-errors flag disables retry functionality."""
@@ -576,10 +561,7 @@ class TestSPQRMonitor(unittest.TestCase):
             TaskGroup("tg3", "shard-001", "kr3", "RUNNING"),
         ]
 
-        with patch.object(
-            monitor_no_retry, "execute_write", return_value=("", "", 0)
-        ) as mock_write:
-            count = monitor_no_retry.retry_error_task_groups(task_groups)
+        count = monitor_no_retry.retry_error_task_groups(task_groups)
 
         # Function should still work, but won't be called in run_iteration
         self.assertEqual(count, 2)

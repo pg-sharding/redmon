@@ -170,6 +170,66 @@ class SPQRMonitor:
         
         return any(retryable in error for retryable in retryable_errors)
 
+    def _execute_psql_async(self, sql_cmd: str, operation_name: str, identifier: str) -> bool:
+        """Execute a psql command as background process.
+        
+        Args:
+            sql_cmd: The SQL command to execute
+            operation_name: Name of the operation for logging (e.g., 'retry', 'redistribution')
+            identifier: Unique identifier for creating log file hash
+        
+        Returns:
+            True if background process started successfully, False otherwise
+        """
+        # Create short identifier for log files
+        session_hash = hashlib.md5(identifier.encode()).hexdigest()[:8]
+        log_file = f"/var/log/spqr/{operation_name}_{session_hash}.log"
+        
+        # Build psql command with individual flags
+        psql_args = [
+            "/usr/bin/psql",
+            "-p", str(self.db_port),
+            "-d", self.db_name,
+            "-U", self.db_user,
+            "-c", sql_cmd
+        ]
+        
+        if self.dry_run:
+            cmd_str = " ".join([f'"{arg}"' if " " in arg else arg for arg in psql_args])
+            print(f"Would run: {cmd_str} > {log_file} 2>&1 &")
+            return True
+        
+        try:
+            # Open log file for output
+            log_fd = open(log_file, "w")
+            
+            # Start background process
+            process = subprocess.Popen(
+                psql_args,
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+                start_new_session=True  # Detach from parent session
+            )
+            
+            self.logger.info(
+                f"Started {operation_name} of {identifier} "
+                f"(PID: {process.pid}, log: {log_file})"
+            )
+            
+            # Don't wait for process to complete - it's a background task
+            return True
+            
+        except Exception as e:
+            self.logger.error(
+                f"Failed to start {operation_name} for {identifier}: {e}"
+            )
+            return False
+
+    def retry_task_group_async(self, task_group_id: str) -> bool:
+        """Retry a task group as background process."""
+        sql_cmd = f"RETRY TASK GROUP '{task_group_id}';"
+        return self._execute_psql_async(sql_cmd, "retry", task_group_id)
+
     def retry_error_task_groups(self, task_groups: List[TaskGroup]) -> int:
         """Retry task groups with ERROR state and retryable errors."""
         error_groups = [
@@ -184,17 +244,7 @@ class SPQRMonitor:
 
         retry_count = 0
         for tg in error_groups[:self.max_retries_per_iteration]:
-            cmd = (
-                self._psql_command(f"RETRY TASK GROUP '{tg.task_group_id}';")
-            )
-            stdout, stderr, code = self.execute_write(cmd)
-
-            if code != 0:
-                self.logger.error(
-                    f"Failed to retry task group {tg.task_group_id}: {stderr}"
-                )
-            else:
-                self.logger.info(f"Retried task group {tg.task_group_id}")
+            if self.retry_task_group_async(tg.task_group_id):
                 retry_count += 1
 
         return retry_count
@@ -279,52 +329,8 @@ class SPQRMonitor:
         self, key_range_id: str, target_shard: str, batch_size: int = 300000
     ) -> bool:
         """Redistribute key range to target shard as background process."""
-        # Create short identifier for log files
-        session_hash = hashlib.md5(key_range_id.encode()).hexdigest()[:8]
-        log_file = f"/var/log/spqr/redistribute_{session_hash}.log"
-        
-        # Build the SQL command
         sql_cmd = f"REDISTRIBUTE KEY RANGE '{key_range_id}' TO '{target_shard}' BATCH SIZE {batch_size};"
-        
-        # Build psql command with individual flags
-        psql_args = [
-            "/usr/bin/psql",
-            "-p", str(self.db_port),
-            "-d", self.db_name,
-            "-U", self.db_user,
-            "-c", sql_cmd
-        ]
-        
-        if self.dry_run:
-            cmd_str = " ".join([f'"{arg}"' if " " in arg else arg for arg in psql_args])
-            print(f"Would run: {cmd_str} > {log_file} 2>&1 &")
-            return True
-        
-        try:
-            # Open log file for output
-            log_fd = open(log_file, "w")
-            
-            # Start background process
-            process = subprocess.Popen(
-                psql_args,
-                stdout=log_fd,
-                stderr=subprocess.STDOUT,
-                start_new_session=True  # Detach from parent session
-            )
-            
-            self.logger.info(
-                f"Started redistribution of {key_range_id} to {target_shard} "
-                f"(PID: {process.pid}, log: {log_file})"
-            )
-            
-            # Don't wait for process to complete - it's a background task
-            return True
-            
-        except Exception as e:
-            self.logger.error(
-                f"Failed to start redistribution for {key_range_id}: {e}"
-            )
-            return False
+        return self._execute_psql_async(sql_cmd, "redistribute", key_range_id)
 
     def run_iteration(self) -> None:
         """Run one iteration of monitoring."""
