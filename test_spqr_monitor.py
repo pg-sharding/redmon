@@ -451,7 +451,32 @@ class TestSPQRMonitor(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_retry_error_task_groups_max_4(self):
-        """Test that max 4 task groups are retried per iteration."""
+        """Test that max_retries_per_iteration parameter limits retries correctly."""
+        # Create monitor with max_retries_per_iteration=4
+        monitor = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_retries_per_iteration=4,
+            logger=self.logger,
+        )
+        
+        task_groups = [
+            TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "etcdserver: request timed out")
+            for i in range(10)
+        ]
+
+        with patch.object(
+            monitor, "execute_write", return_value=("", "", 0)
+        ):
+            count = monitor.retry_error_task_groups(task_groups)
+
+        self.assertEqual(count, 4)
+
+    def test_retry_error_task_groups_default_max_1(self):
+        """Test that default max_retries_per_iteration is 1."""
         task_groups = [
             TaskGroup(f"tg{i}", "shard-001", f"kr{i}", "ERROR", "etcdserver: request timed out")
             for i in range(10)
@@ -462,10 +487,21 @@ class TestSPQRMonitor(unittest.TestCase):
         ):
             count = self.monitor.retry_error_task_groups(task_groups)
 
-        self.assertEqual(count, 4)
+        self.assertEqual(count, 1)
 
     def test_retry_etcdserver_timeout_short_message(self):
         """Test retrying tasks with short etcdserver timeout error (without 'possibly due to')."""
+        # Create monitor with max_retries_per_iteration=3 to test multiple retries
+        monitor = SPQRMonitor(
+            db_host="localhost",
+            db_port=6432,
+            db_name="spqr-console",
+            db_user="spqr-console",
+            dry_run=True,
+            max_retries_per_iteration=3,
+            logger=self.logger,
+        )
+        
         task_groups = [
             TaskGroup("tg1", "shard-007", "kr1", "ERROR", "etcdserver: request timed out"),
             TaskGroup("tg2", "shard-004", "kr2", "ERROR", "etcdserver: request timed out"),
@@ -474,9 +510,9 @@ class TestSPQRMonitor(unittest.TestCase):
         ]
 
         with patch.object(
-            self.monitor, "execute_write", return_value=("", "", 0)
+            monitor, "execute_write", return_value=("", "", 0)
         ):
-            count = self.monitor.retry_error_task_groups(task_groups)
+            count = monitor.retry_error_task_groups(task_groups)
 
         # Should retry 3 error tasks (not the RUNNING one)
         self.assertEqual(count, 3)
@@ -530,6 +566,7 @@ class TestSPQRMonitor(unittest.TestCase):
             db_user="spqr-console",
             dry_run=True,
             retry_errors=False,
+            max_retries_per_iteration=2,
             logger=self.logger,
         )
         

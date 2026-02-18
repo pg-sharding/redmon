@@ -49,6 +49,7 @@ class SPQRMonitor:
         retry_errors: bool = False,
         max_failed_tasks: Optional[int] = None,
         max_running_tasks: int = 8,
+        max_retries_per_iteration: int = 1,
         logger: Optional[logging.Logger] = None,
     ):
         self.db_host = db_host
@@ -59,6 +60,7 @@ class SPQRMonitor:
         self.retry_errors = retry_errors
         self.max_failed_tasks = max_failed_tasks
         self.max_running_tasks = max_running_tasks
+        self.max_retries_per_iteration = max_retries_per_iteration
         self.logger = logger or self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
@@ -169,7 +171,7 @@ class SPQRMonitor:
         return any(retryable in error for retryable in retryable_errors)
 
     def retry_error_task_groups(self, task_groups: List[TaskGroup]) -> int:
-        """Retry task groups with ERROR state and retryable errors. Max 4 retries per iteration."""
+        """Retry task groups with ERROR state and retryable errors."""
         error_groups = [
             tg for tg in task_groups 
             if tg.state == "ERROR" and self._is_retryable_error(tg.error)
@@ -181,7 +183,7 @@ class SPQRMonitor:
         self.logger.info(f"Found {len(error_groups)} task groups with retryable errors")
 
         retry_count = 0
-        for tg in error_groups[:4]:  # Max 4 retries
+        for tg in error_groups[:self.max_retries_per_iteration]:
             cmd = (
                 self._psql_command(f"RETRY TASK GROUP '{tg.task_group_id}';")
             )
@@ -477,6 +479,12 @@ def main():
         default=8,
         help="Skip redistribution if this many task groups are already running (default: 8)",
     )
+    parser.add_argument(
+        "--max-retries-per-iteration",
+        type=int,
+        default=1,
+        help="Maximum number of task groups to retry per iteration (default: 1)",
+    )
 
     args = parser.parse_args()
 
@@ -491,6 +499,7 @@ def main():
         retry_errors=args.retry_errors,
         max_failed_tasks=args.max_failed_tasks,
         max_running_tasks=args.max_running_tasks,
+        max_retries_per_iteration=args.max_retries_per_iteration,
         logger=logger,
     )
 
