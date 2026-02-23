@@ -166,6 +166,7 @@ class SPQRMonitor:
         retryable_errors = [
             "etcdserver: request timed out",
             "rpc error: code = Canceled desc = grpc: the client connection is closing",
+            "task group lost running",
         ]
         
         return any(retryable in error for retryable in retryable_errors)
