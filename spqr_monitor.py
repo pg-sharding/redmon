@@ -167,6 +167,7 @@ class SPQRMonitor:
             "etcdserver: request timed out",
             "rpc error: code = Canceled desc = grpc: the client connection is closing",
             "task group lost running",
+            "failed to await virtual transactions to exit",
         ]
         
         return any(retryable in error for retryable in retryable_errors)
@@ -240,7 +241,7 @@ class SPQRMonitor:
 
         if not error_groups:
             return 0
-        
+
         self.logger.info(f"Found {len(error_groups)} task groups with retryable errors")
 
         retry_count = 0
@@ -314,14 +315,14 @@ class SPQRMonitor:
         
         # Map first hex digit to shard: 0-1→001, 2-3→002, ..., e-f→008
         hex_to_shard = {
-            '0': 'shard-001', '1': 'shard-001',
-            '2': 'shard-002', '3': 'shard-002',
-            '4': 'shard-003', '5': 'shard-003',
-            '6': 'shard-004', '7': 'shard-004',
-            '8': 'shard-005', '9': 'shard-005',
-            'a': 'shard-006', 'b': 'shard-006',
-            'c': 'shard-007', 'd': 'shard-007',
-            'e': 'shard-008', 'f': 'shard-008',
+            '0': 'shard-001', '1': 'shard-009',
+            '2': 'shard-002', '3': 'shard-010',
+            '4': 'shard-003', '5': 'shard-011',
+            '6': 'shard-004', '7': 'shard-012',
+            '8': 'shard-005', '9': 'shard-013',
+            'a': 'shard-006', 'b': 'shard-014',
+            'c': 'shard-007', 'd': 'shard-015',
+            'e': 'shard-008', 'f': 'shard-016',
         }
         
         return hex_to_shard.get(first_hex)
