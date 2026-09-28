@@ -204,21 +204,32 @@ class TestSPQRMonitor(unittest.TestCase):
 
     def test_determine_target_shard(self):
         """Test determining target shard based on UUID."""
-        # UUID starting with 0 -> shard-001
-        target = self.monitor.determine_target_shard("'00000000-0000-0000-0000-000000000000'")
-        self.assertEqual(target, "shard-001")
-        
-        # UUID starting with 2 -> shard-002
-        target = self.monitor.determine_target_shard("'2abc1234-5678-90ab-cdef-1234567890ab'")
-        self.assertEqual(target, "shard-002")
-        
-        # UUID starting with e -> shard-008
-        target = self.monitor.determine_target_shard("'e0000000-0000-0000-0000-000000000000'")
-        self.assertEqual(target, "shard-008")
-        
-        # UUID starting with f -> shard-008
-        target = self.monitor.determine_target_shard("'ffffffff-ffff-ffff-ffff-ffffffffffff'")
-        self.assertEqual(target, "shard-008")
+        expected_shards = {
+            "0": "shard-001",
+            "1": "shard-009",
+            "2": "shard-002",
+            "3": "shard-010",
+            "4": "shard-003",
+            "5": "shard-011",
+            "6": "shard-004",
+            "7": "shard-012",
+            "8": "shard-005",
+            "9": "shard-013",
+            "a": "shard-006",
+            "b": "shard-014",
+            "c": "shard-007",
+            "d": "shard-015",
+            "e": "shard-008",
+            "f": "shard-016",
+        }
+
+        for first_hex, expected_shard in expected_shards.items():
+            with self.subTest(first_hex=first_hex):
+                lower_bound = f"'{first_hex}0000000-0000-0000-0000-000000000000'"
+                self.assertEqual(
+                    self.monitor.determine_target_shard(lower_bound),
+                    expected_shard,
+                )
 
     def test_determine_target_shard_invalid_uuid(self):
         """Test when invalid UUID is provided."""
@@ -515,6 +526,23 @@ class TestSPQRMonitor(unittest.TestCase):
         count = self.monitor.retry_error_task_groups(task_groups)
 
         # Should match because 'etcdserver: request timed out' is contained in the longer message
+        self.assertEqual(count, 1)
+
+    def test_retry_await_virtual_transactions_error(self):
+        """Test retrying tasks that fail while awaiting virtual transactions."""
+        task_groups = [
+            TaskGroup(
+                "tg1",
+                "shard-001",
+                "kr1",
+                "ERROR",
+                "failed to await virtual transactions to exit: context deadline exceeded",
+            ),
+            TaskGroup("tg2", "shard-001", "kr2", "RUNNING"),
+        ]
+
+        count = self.monitor.retry_error_task_groups(task_groups)
+
         self.assertEqual(count, 1)
 
     def test_retry_non_retryable_errors(self):
